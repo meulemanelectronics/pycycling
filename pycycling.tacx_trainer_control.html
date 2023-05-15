@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>pycycling.tacx_trainer_control module &#8212; pycycling  documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="pycycling.sterzo module" href="pycycling.sterzo.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="module-pycycling.tacx_trainer_control">
+<span id="pycycling-tacx-trainer-control-module"></span><h1>pycycling.tacx_trainer_control module<a class="headerlink" href="#module-pycycling.tacx_trainer_control" title="Permalink to this heading">¶</a></h1>
+<p>A module for interacting with Tacx Bluetooth smart turbo trainers.</p>
+<p>This protocol is a variation of the ANT+ FE-C standard (but using BLE instead of ANT+) - Tacx released many of their
+trainers before the now common FTMS protocol was finalised.</p>
+<p>The protocol also facilitates the use of the NEO Road Feel feature.</p>
+<section id="smart-trainer-modes-of-operation">
+<h2>Smart trainer modes of operation<a class="headerlink" href="#smart-trainer-modes-of-operation" title="Permalink to this heading">¶</a></h2>
+<p>The FE-C standard defines a few modes of operation. To understand the difference between these, a little theory is
+required.</p>
+<p>Fundamentally, when you cycle two types of forces come into play:</p>
+<ul class="simple">
+<li><dl class="simple">
+<dt><strong>Resistive forces</strong>:</dt><dd><p>These are typically rolling resistance, wind resistance, and gravitational resistance.
+They are forces that would bring you back to a stop if you stop cycling.</p>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt><strong>Inertial forces</strong>:</dt><dd><p>These are the forces that resist changes to your velocity (think Newton’s second law). These forces work against you
+when you accelerate making it hard work to get going (and even harder the heavier you are).
+However, when you stop pedalling these forces work in your favour, and help counter the resistive forces which slow
+you down, allowing you to coast along for a while.</p>
+</dd>
+</dl>
+</li>
+</ul>
+<p>Many turbo trainers apply inertial forces through a heavy flywheel, and resistive forces through a brake device. The
+Tacx NEO is somewhat unique in that it applies both inertial and resistive forces through electromagnets.</p>
+<p>The NEO has 5 different operational modes, which alter the application of these two types of forces. Other trainers
+support only the first 3. I’ll try and explain in a few words what each does:</p>
+<ul class="simple">
+<li><dl class="simple">
+<dt><strong>Basic resistance mode</strong>:</dt><dd><p>This is a simple mode, and not useful for many applications. You directly set the resistance force. It applies
+inertial forces assuming a small preset rider mass which means that this mode is not useful for a simulator (because
+it therefore applies the incorrect inertial forces for most riders). In pycycling you activate it by using
+<a class="reference internal" href="#pycycling.tacx_trainer_control.TacxTrainerControl.set_basic_resistance" title="pycycling.tacx_trainer_control.TacxTrainerControl.set_basic_resistance"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_basic_resistance</span></code></a>.</p>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt><strong>Simulation mode</strong>:</dt><dd><p>Here, the trainer computes the resistive force by internally computing a simple physics equation.
+The equation has parameters which can be configured such as wind speed and track incline. For the full details,
+please refer to the ANT+ FE-C specification. In this mode, the trainer dynamically adjusts the flywheel mass so it
+applies the correct inertial force for the rider. To activate this mode, first use
+<a class="reference internal" href="#pycycling.tacx_trainer_control.TacxTrainerControl.set_user_configuration" title="pycycling.tacx_trainer_control.TacxTrainerControl.set_user_configuration"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_user_configuration</span></code></a> then
+<a class="reference internal" href="#pycycling.tacx_trainer_control.TacxTrainerControl.set_wind_resistance" title="pycycling.tacx_trainer_control.TacxTrainerControl.set_wind_resistance"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_wind_resistance</span></code></a> and
+<a class="reference internal" href="#pycycling.tacx_trainer_control.TacxTrainerControl.set_track_resistance" title="pycycling.tacx_trainer_control.TacxTrainerControl.set_track_resistance"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_track_resistance</span></code></a> as required.
+I would strongly recommend using this for any simulator application and this is what is used by Zwift etc.</p>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt><strong>Target power mode (erg mode)</strong>:</dt><dd><p>The trainer adjusts the resistance based on the riders exertion in order to maintain a constant power output.
+Use <a class="reference internal" href="#pycycling.tacx_trainer_control.TacxTrainerControl.set_target_power" title="pycycling.tacx_trainer_control.TacxTrainerControl.set_target_power"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_target_power</span></code></a> to activate.</p>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt><strong>Isokinetic mode</strong>:</dt><dd><p>The trainer adjusts the resistance to maintain a constant cadence.
+See <a class="reference internal" href="#pycycling.tacx_trainer_control.TacxTrainerControl.set_neo_modes" title="pycycling.tacx_trainer_control.TacxTrainerControl.set_neo_modes"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_neo_modes</span></code></a> for info on this.</p>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt><strong>Isotonic mode</strong>:</dt><dd><p>This is a special case of basic resistance mode, where the flywheel simulated mass is set to zero rather than a
+small mass, meaning the inertial forces applied by the trainer are zero. To activate, set bike weight, user weight,
+incline, drag resistance and rolling resistance to zero and then use <a class="reference internal" href="#pycycling.tacx_trainer_control.TacxTrainerControl.set_basic_resistance" title="pycycling.tacx_trainer_control.TacxTrainerControl.set_basic_resistance"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_basic_resistance</span></code></a> as before.</p>
+</dd>
+</dl>
+</li>
+</ul>
+</section>
+<section id="example">
+<h2>Example<a class="headerlink" href="#example" title="Permalink to this heading">¶</a></h2>
+<p>This example demonstrates use of the basic resistance mode. Initially a resistance of 20 newtons is set, and then 20
+seconds later this is adjusted to 40 newtons. Data from the trainer is also printed to the console. Please see also
+information on <a class="reference internal" href="pycycling.html#obtaining-device-address"><span class="std std-ref">obtaining the Bluetooth address of your device</span></a>.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">from</span> <span class="nn">bleak</span> <span class="kn">import</span> <span class="n">BleakClient</span>
+
+<span class="kn">from</span> <span class="nn">pycycling.tacx_trainer_control</span> <span class="kn">import</span> <span class="n">TacxTrainerControl</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="n">address</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">BleakClient</span><span class="p">(</span><span class="n">address</span><span class="p">)</span> <span class="k">as</span> <span class="n">client</span><span class="p">:</span>
+        <span class="k">def</span> <span class="nf">my_page_handler</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+        <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">is_connected</span><span class="p">()</span>
+        <span class="n">trainer</span> <span class="o">=</span> <span class="n">TacxTrainerControl</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
+        <span class="n">trainer</span><span class="o">.</span><span class="n">set_specific_trainer_data_page_handler</span><span class="p">(</span><span class="n">my_page_handler</span><span class="p">)</span>
+        <span class="n">trainer</span><span class="o">.</span><span class="n">set_general_fe_data_page_handler</span><span class="p">(</span><span class="n">my_page_handler</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">trainer</span><span class="o">.</span><span class="n">enable_fec_notifications</span><span class="p">()</span>
+        <span class="k">await</span> <span class="n">trainer</span><span class="o">.</span><span class="n">set_basic_resistance</span><span class="p">(</span><span class="mi">20</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">20.0</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">trainer</span><span class="o">.</span><span class="n">set_basic_resistance</span><span class="p">(</span><span class="mi">40</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">20.0</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">trainer</span><span class="o">.</span><span class="n">disable_fec_notifications</span><span class="p">()</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">os</span>
+
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;PYTHONASYNCIODEBUG&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="n">device_address</span> <span class="o">=</span> <span class="s2">&quot;EAAA3D1F-6760-4D77-961E-8DDAC1CC9AED&quot;</span>
+    <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">()</span>
+    <span class="n">loop</span><span class="o">.</span><span class="n">run_until_complete</span><span class="p">(</span><span class="n">run</span><span class="p">(</span><span class="n">device_address</span><span class="p">))</span>
+</pre></div>
+</div>
+</section>
+<dl class="py class">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.CommandStatus">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pycycling.tacx_trainer_control.</span></span><span class="sig-name descname"><span class="pre">CommandStatus</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qualname</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">boundary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pycycling.tacx_trainer_control.CommandStatus" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.CommandStatus.fail">
+<span class="sig-name descname"><span class="pre">fail</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">2</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.CommandStatus.fail" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.CommandStatus.not_supported">
+<span class="sig-name descname"><span class="pre">not_supported</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">3</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.CommandStatus.not_supported" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.CommandStatus.rejected">
+<span class="sig-name descname"><span class="pre">rejected</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">4</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.CommandStatus.rejected" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.CommandStatus.success">
+<span class="sig-name descname"><span class="pre">success</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.CommandStatus.success" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.CommandStatus.uninitialized">
+<span class="sig-name descname"><span class="pre">uninitialized</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">5</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.CommandStatus.uninitialized" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.CommandStatusData">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pycycling.tacx_trainer_control.</span></span><span class="sig-name descname"><span class="pre">CommandStatusData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">last_received_command</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">command_status</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pycycling.tacx_trainer_control.CommandStatusData" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.CommandStatusData.command_status">
+<span class="sig-name descname"><span class="pre">command_status</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.CommandStatusData.command_status" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.CommandStatusData.data">
+<span class="sig-name descname"><span class="pre">data</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.CommandStatusData.data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 2</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.CommandStatusData.last_received_command">
+<span class="sig-name descname"><span class="pre">last_received_command</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.CommandStatusData.last_received_command" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.EquipmentType">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pycycling.tacx_trainer_control.</span></span><span class="sig-name descname"><span class="pre">EquipmentType</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qualname</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">boundary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pycycling.tacx_trainer_control.EquipmentType" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.EquipmentType.climber">
+<span class="sig-name descname"><span class="pre">climber</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">5</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.EquipmentType.climber" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.EquipmentType.elliptical">
+<span class="sig-name descname"><span class="pre">elliptical</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">2</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.EquipmentType.elliptical" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.EquipmentType.nordic_skier">
+<span class="sig-name descname"><span class="pre">nordic_skier</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">6</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.EquipmentType.nordic_skier" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.EquipmentType.reserved">
+<span class="sig-name descname"><span class="pre">reserved</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">3</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.EquipmentType.reserved" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.EquipmentType.rower">
+<span class="sig-name descname"><span class="pre">rower</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">4</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.EquipmentType.rower" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.EquipmentType.trainer">
+<span class="sig-name descname"><span class="pre">trainer</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">7</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.EquipmentType.trainer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.EquipmentType.treadmill">
+<span class="sig-name descname"><span class="pre">treadmill</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.EquipmentType.treadmill" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.FEState">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pycycling.tacx_trainer_control.</span></span><span class="sig-name descname"><span class="pre">FEState</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qualname</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">boundary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pycycling.tacx_trainer_control.FEState" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.FEState.finished">
+<span class="sig-name descname"><span class="pre">finished</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">4</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.FEState.finished" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.FEState.in_use">
+<span class="sig-name descname"><span class="pre">in_use</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">3</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.FEState.in_use" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.FEState.ready">
+<span class="sig-name descname"><span class="pre">ready</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">2</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.FEState.ready" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.FEState.reserved">
+<span class="sig-name descname"><span class="pre">reserved</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.FEState.reserved" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.GeneralFEData">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pycycling.tacx_trainer_control.</span></span><span class="sig-name descname"><span class="pre">GeneralFEData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">equipment_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elapsed_time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distance_travelled</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">speed</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">heart_rate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fe_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lap_toggle</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pycycling.tacx_trainer_control.GeneralFEData" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.GeneralFEData.distance_travelled">
+<span class="sig-name descname"><span class="pre">distance_travelled</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.GeneralFEData.distance_travelled" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 2</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.GeneralFEData.elapsed_time">
+<span class="sig-name descname"><span class="pre">elapsed_time</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.GeneralFEData.elapsed_time" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.GeneralFEData.equipment_type">
+<span class="sig-name descname"><span class="pre">equipment_type</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.GeneralFEData.equipment_type" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.GeneralFEData.fe_state">
+<span class="sig-name descname"><span class="pre">fe_state</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.GeneralFEData.fe_state" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 5</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.GeneralFEData.heart_rate">
+<span class="sig-name descname"><span class="pre">heart_rate</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.GeneralFEData.heart_rate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 4</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.GeneralFEData.lap_toggle">
+<span class="sig-name descname"><span class="pre">lap_toggle</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.GeneralFEData.lap_toggle" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 6</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.GeneralFEData.speed">
+<span class="sig-name descname"><span class="pre">speed</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.GeneralFEData.speed" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 3</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.RoadSurface">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pycycling.tacx_trainer_control.</span></span><span class="sig-name descname"><span class="pre">RoadSurface</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qualname</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">boundary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pycycling/tacx_trainer_control.html#RoadSurface"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pycycling.tacx_trainer_control.RoadSurface" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></p>
+<p>Road surfaces supported by the NEO road feel feature</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.RoadSurface.BRICK_ROAD">
+<span class="sig-name descname"><span class="pre">BRICK_ROAD</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">5</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.RoadSurface.BRICK_ROAD" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.RoadSurface.CATTLE_GRID">
+<span class="sig-name descname"><span class="pre">CATTLE_GRID</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">2</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.RoadSurface.CATTLE_GRID" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.RoadSurface.COBBLESTONES_HARD">
+<span class="sig-name descname"><span class="pre">COBBLESTONES_HARD</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">3</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.RoadSurface.COBBLESTONES_HARD" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.RoadSurface.COBBLESTONES_SOFT">
+<span class="sig-name descname"><span class="pre">COBBLESTONES_SOFT</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">4</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.RoadSurface.COBBLESTONES_SOFT" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.RoadSurface.CONCRETE_PLATES">
+<span class="sig-name descname"><span class="pre">CONCRETE_PLATES</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.RoadSurface.CONCRETE_PLATES" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.RoadSurface.GRAVEL">
+<span class="sig-name descname"><span class="pre">GRAVEL</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">7</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.RoadSurface.GRAVEL" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.RoadSurface.ICE">
+<span class="sig-name descname"><span class="pre">ICE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">8</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.RoadSurface.ICE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.RoadSurface.OFF_ROAD">
+<span class="sig-name descname"><span class="pre">OFF_ROAD</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">6</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.RoadSurface.OFF_ROAD" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.RoadSurface.SIMULATION_OFF">
+<span class="sig-name descname"><span class="pre">SIMULATION_OFF</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.RoadSurface.SIMULATION_OFF" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.RoadSurface.WOODEN_BOARDS">
+<span class="sig-name descname"><span class="pre">WOODEN_BOARDS</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">9</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.RoadSurface.WOODEN_BOARDS" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.SpecificTrainerData">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pycycling.tacx_trainer_control.</span></span><span class="sig-name descname"><span class="pre">SpecificTrainerData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">update_event_count</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instantaneous_cadence</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">accumulated_power</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instantaneous_power</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trainer_status</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_power_limits</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fe_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lap_toggle</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">power_calibration_required</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resistance_calibration_required</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">user_configuration_required</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pycycling.tacx_trainer_control.SpecificTrainerData" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.SpecificTrainerData.accumulated_power">
+<span class="sig-name descname"><span class="pre">accumulated_power</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.SpecificTrainerData.accumulated_power" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 2</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.SpecificTrainerData.fe_state">
+<span class="sig-name descname"><span class="pre">fe_state</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.SpecificTrainerData.fe_state" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 6</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.SpecificTrainerData.instantaneous_cadence">
+<span class="sig-name descname"><span class="pre">instantaneous_cadence</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.SpecificTrainerData.instantaneous_cadence" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.SpecificTrainerData.instantaneous_power">
+<span class="sig-name descname"><span class="pre">instantaneous_power</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.SpecificTrainerData.instantaneous_power" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 3</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.SpecificTrainerData.lap_toggle">
+<span class="sig-name descname"><span class="pre">lap_toggle</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.SpecificTrainerData.lap_toggle" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 7</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.SpecificTrainerData.power_calibration_required">
+<span class="sig-name descname"><span class="pre">power_calibration_required</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.SpecificTrainerData.power_calibration_required" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 8</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.SpecificTrainerData.resistance_calibration_required">
+<span class="sig-name descname"><span class="pre">resistance_calibration_required</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.SpecificTrainerData.resistance_calibration_required" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 9</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.SpecificTrainerData.target_power_limits">
+<span class="sig-name descname"><span class="pre">target_power_limits</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.SpecificTrainerData.target_power_limits" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 5</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.SpecificTrainerData.trainer_status">
+<span class="sig-name descname"><span class="pre">trainer_status</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.SpecificTrainerData.trainer_status" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 4</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.SpecificTrainerData.update_event_count">
+<span class="sig-name descname"><span class="pre">update_event_count</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.SpecificTrainerData.update_event_count" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.SpecificTrainerData.user_configuration_required">
+<span class="sig-name descname"><span class="pre">user_configuration_required</span></span><a class="headerlink" href="#pycycling.tacx_trainer_control.SpecificTrainerData.user_configuration_required" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alias for field number 10</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TacxTrainerControl">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pycycling.tacx_trainer_control.</span></span><span class="sig-name descname"><span class="pre">TacxTrainerControl</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pycycling/tacx_trainer_control.html#TacxTrainerControl"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pycycling.tacx_trainer_control.TacxTrainerControl" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TacxTrainerControl.disable_fec_notifications">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">disable_fec_notifications</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/pycycling/tacx_trainer_control.html#TacxTrainerControl.disable_fec_notifications"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pycycling.tacx_trainer_control.TacxTrainerControl.disable_fec_notifications" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TacxTrainerControl.enable_fec_notifications">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">enable_fec_notifications</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/pycycling/tacx_trainer_control.html#TacxTrainerControl.enable_fec_notifications"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pycycling.tacx_trainer_control.TacxTrainerControl.enable_fec_notifications" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TacxTrainerControl.request_data_page">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">request_data_page</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">page_number</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pycycling/tacx_trainer_control.html#TacxTrainerControl.request_data_page"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pycycling.tacx_trainer_control.TacxTrainerControl.request_data_page" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TacxTrainerControl.set_basic_resistance">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set_basic_resistance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">resistance</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pycycling/tacx_trainer_control.html#TacxTrainerControl.set_basic_resistance"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pycycling.tacx_trainer_control.TacxTrainerControl.set_basic_resistance" title="Permalink to this definition">¶</a></dt>
+<dd><p>Activate basic resistance mode, with specified resistance</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>resistance</strong> – Resistance to apply to trainer, in newtons</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TacxTrainerControl.set_command_status_data_page_handler">
+<span class="sig-name descname"><span class="pre">set_command_status_data_page_handler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">callback</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pycycling/tacx_trainer_control.html#TacxTrainerControl.set_command_status_data_page_handler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pycycling.tacx_trainer_control.TacxTrainerControl.set_command_status_data_page_handler" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TacxTrainerControl.set_general_fe_data_page_handler">
+<span class="sig-name descname"><span class="pre">set_general_fe_data_page_handler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">callback</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pycycling/tacx_trainer_control.html#TacxTrainerControl.set_general_fe_data_page_handler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pycycling.tacx_trainer_control.TacxTrainerControl.set_general_fe_data_page_handler" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TacxTrainerControl.set_neo_modes">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set_neo_modes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">isokinetic_mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">isokinetic_speed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4.2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">road_surface_pattern</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">RoadSurface.SIMULATION_OFF</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">road_surface_pattern_intensity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">255</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pycycling/tacx_trainer_control.html#TacxTrainerControl.set_neo_modes"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pycycling.tacx_trainer_control.TacxTrainerControl.set_neo_modes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set NEO specific parameters such as Road Feel mode and Isokinetic training mode</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>isokinetic_mode</strong> – Enable isokinetic mode of the trainer</p></li>
+<li><p><strong>isokinetic_speed</strong> – The target speed used in isokinetic mode</p></li>
+<li><p><strong>road_surface_pattern</strong> – The road surface to be simulated</p></li>
+<li><p><strong>road_surface_pattern_intensity</strong> – The intensity of the feeling of the road surface. Note that even 50%
+feels fairly intense, 100% is untested and may damage the trainer!</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TacxTrainerControl.set_specific_trainer_data_page_handler">
+<span class="sig-name descname"><span class="pre">set_specific_trainer_data_page_handler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">callback</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pycycling/tacx_trainer_control.html#TacxTrainerControl.set_specific_trainer_data_page_handler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pycycling.tacx_trainer_control.TacxTrainerControl.set_specific_trainer_data_page_handler" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TacxTrainerControl.set_target_power">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set_target_power</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">target_power</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pycycling/tacx_trainer_control.html#TacxTrainerControl.set_target_power"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pycycling.tacx_trainer_control.TacxTrainerControl.set_target_power" title="Permalink to this definition">¶</a></dt>
+<dd><p>Activate target power mode, with specified target power</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>target_power</strong> – Target power, in watts</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TacxTrainerControl.set_track_resistance">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set_track_resistance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">grade</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coefficient_of_rolling_resistance</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pycycling/tacx_trainer_control.html#TacxTrainerControl.set_track_resistance"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pycycling.tacx_trainer_control.TacxTrainerControl.set_track_resistance" title="Permalink to this definition">¶</a></dt>
+<dd><p>Activate simulation mode, specifying track resistance parameters</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>grade</strong> – The grade (slope) of simulated track, in %.</p></li>
+<li><p><strong>coefficient_of_rolling_resistance</strong> – The coefficient of rolling resistance, in dimensionless units</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TacxTrainerControl.set_user_configuration">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set_user_configuration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">user_weight</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bicycle_weight</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bicycle_wheel_diameter</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gear_ratio</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pycycling/tacx_trainer_control.html#TacxTrainerControl.set_user_configuration"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pycycling.tacx_trainer_control.TacxTrainerControl.set_user_configuration" title="Permalink to this definition">¶</a></dt>
+<dd><p>Configure trainer parameters, used when the trainer is in simulation mode</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>user_weight</strong> – Weight of the user in kilograms</p></li>
+<li><p><strong>bicycle_weight</strong> – Weight of bicycle in kilograms</p></li>
+<li><p><strong>bicycle_wheel_diameter</strong> – Diameter of bike wheel, in metres</p></li>
+<li><p><strong>gear_ratio</strong> – The bike gear ratio (front chain ring teeth:rear wheel cog teeth)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TacxTrainerControl.set_wind_resistance">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set_wind_resistance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">wind_resistance_coefficient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wind_speed</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">drafting_factor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pycycling/tacx_trainer_control.html#TacxTrainerControl.set_wind_resistance"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pycycling.tacx_trainer_control.TacxTrainerControl.set_wind_resistance" title="Permalink to this definition">¶</a></dt>
+<dd><p>Activate simulation mode, specifying wind parameters</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>wind_resistance_coefficient</strong> – Wind resistance coefficient is the product of the frontal surface area,
+drag coefficient and air density of the simulation, in kg/m</p></li>
+<li><p><strong>wind_speed</strong> – Speed of wind acting on cyclist in simulation, in km/h. A positive value represents a head
+wind while a negative value represents a tail wind</p></li>
+<li><p><strong>drafting_factor</strong> – Use parameter to scale wind resistance to simulate drafting behind a virtual opponent</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TargetPowerLimit">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pycycling.tacx_trainer_control.</span></span><span class="sig-name descname"><span class="pre">TargetPowerLimit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qualname</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">boundary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pycycling.tacx_trainer_control.TargetPowerLimit" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TargetPowerLimit.limit_reached">
+<span class="sig-name descname"><span class="pre">limit_reached</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">4</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.TargetPowerLimit.limit_reached" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TargetPowerLimit.operating_at_target_or_no_target_set">
+<span class="sig-name descname"><span class="pre">operating_at_target_or_no_target_set</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.TargetPowerLimit.operating_at_target_or_no_target_set" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TargetPowerLimit.user_speed_too_high">
+<span class="sig-name descname"><span class="pre">user_speed_too_high</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">3</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.TargetPowerLimit.user_speed_too_high" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pycycling.tacx_trainer_control.TargetPowerLimit.user_speed_too_low">
+<span class="sig-name descname"><span class="pre">user_speed_too_low</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">2</span></em><a class="headerlink" href="#pycycling.tacx_trainer_control.TargetPowerLimit.user_speed_too_low" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">pycycling</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="pycycling.html">pycycling package</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="pycycling.html#subpackages">Subpackages</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="pycycling.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="pycycling.battery_service.html">pycycling.battery_service module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycycling.cycling_power_service.html">pycycling.cycling_power_service module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycycling.cycling_speed_cadence_service.html">pycycling.cycling_speed_cadence_service module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycycling.fitness_machine_service.html">pycycling.fitness_machine_service module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycycling.heart_rate_service.html">pycycling.heart_rate_service module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycycling.rear_view_radar.html">pycycling.rear_view_radar module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycycling.sterzo.html">pycycling.sterzo module</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">pycycling.tacx_trainer_control module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#smart-trainer-modes-of-operation">Smart trainer modes of operation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#example">Example</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pycycling.tacx_trainer_control.CommandStatus"><code class="docutils literal notranslate"><span class="pre">CommandStatus</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pycycling.tacx_trainer_control.CommandStatusData"><code class="docutils literal notranslate"><span class="pre">CommandStatusData</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pycycling.tacx_trainer_control.EquipmentType"><code class="docutils literal notranslate"><span class="pre">EquipmentType</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pycycling.tacx_trainer_control.FEState"><code class="docutils literal notranslate"><span class="pre">FEState</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pycycling.tacx_trainer_control.GeneralFEData"><code class="docutils literal notranslate"><span class="pre">GeneralFEData</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pycycling.tacx_trainer_control.RoadSurface"><code class="docutils literal notranslate"><span class="pre">RoadSurface</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pycycling.tacx_trainer_control.SpecificTrainerData"><code class="docutils literal notranslate"><span class="pre">SpecificTrainerData</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pycycling.tacx_trainer_control.TacxTrainerControl"><code class="docutils literal notranslate"><span class="pre">TacxTrainerControl</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#pycycling.tacx_trainer_control.TargetPowerLimit"><code class="docutils literal notranslate"><span class="pre">TargetPowerLimit</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="pycycling.html#module-pycycling">Module contents</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  <li><a href="pycycling.html">pycycling package</a><ul>
+      <li>Previous: <a href="pycycling.sterzo.html" title="previous chapter">pycycling.sterzo module</a></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2023, <a href='/'>Zachary Bull</a>.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 7.0.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
+      
+      |
+      <a href="_sources/pycycling.tacx_trainer_control.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
